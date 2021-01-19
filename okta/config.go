@@ -3,6 +3,7 @@ package okta
 import (
 	"context"
 	"fmt"
+	"log"
 	"net/http"
 	"time"
 
@@ -35,10 +36,11 @@ type (
 		backoff          bool
 		minWait          int
 		maxWait          int
-		logLevel         int
+		maxRequests      int // experimental
 		requestTimeout   int
 		oktaClient       *okta.Client
 		supplementClient *sdk.ApiSupplement
+		logLevel         int
 		logger           hclog.Logger
 	}
 )
@@ -62,6 +64,10 @@ func (c *Config) loadAndValidate() error {
 	} else {
 		httpClient = cleanhttp.DefaultClient()
 		httpClient.Transport = logging.NewTransport("Okta", httpClient.Transport)
+	}
+	if c.maxRequests != 100 {
+		log.Printf("[DEBUG] running with experimental max_requests configuration")
+		httpClient.Transport = newRequestThrottleTransport(httpClient.Transport, c.maxRequests)
 	}
 
 	_, client, err := okta.NewClient(
