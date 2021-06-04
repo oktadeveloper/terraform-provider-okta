@@ -24,7 +24,7 @@ resource "okta_group" "test3" {
 }
 
 locals {
-  group_ids = tolist([okta_group.test.id,okta_group.test2.id,okta_group.test3.id])
+  group_ids = tolist([okta_group.test.id, okta_group.test2.id, okta_group.test3.id])
 }
 
 resource "okta_app_group_assignment" "test" {

@@ -1,11 +1,11 @@
 resource "okta_user" "user" {
   admin_roles = [
     "APP_ADMIN",
-    "USER_ADMIN"]
-  first_name  = "TestAcc"
-  last_name   = "blah"
-  login       = "testAcc-replace_with_uuid@example.com"
-  email       = "testAcc-replace_with_uuid@example.com"
+  "USER_ADMIN"]
+  first_name = "TestAcc"
+  last_name  = "blah"
+  login      = "testAcc-replace_with_uuid@example.com"
+  email      = "testAcc-replace_with_uuid@example.com"
 }
 
 resource "okta_group" "group" {

@@ -24,14 +24,14 @@ resource "okta_group" "test3" {
 }
 
 resource "okta_app_group_assignments" "test" {
-  app_id   = okta_app_oauth.test.id
+  app_id = okta_app_oauth.test.id
 
   group {
-    id = okta_group.test1.id
+    id       = okta_group.test1.id
     priority = 2
   }
   group {
-    id = okta_group.test2.id
+    id       = okta_group.test2.id
     priority = 1
   }
 }

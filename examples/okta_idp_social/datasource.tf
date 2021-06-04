@@ -58,7 +58,7 @@ resource "okta_idp_social" "microsoft" {
   username_template = "idpuser.userPrincipalName"
   groups_action     = "ASSIGN"
   groups_assignment = [
-    okta_group.test.id]
+  okta_group.test.id]
 }
 
 resource "okta_group" "test" {
