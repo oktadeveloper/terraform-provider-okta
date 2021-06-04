@@ -128,18 +128,6 @@ func dataSourceAppOauth() *schema.Resource {
 				Computed:    true,
 				Description: "Discoverable resources related to the app",
 			},
-			"groups": {
-				Type:        schema.TypeSet,
-				Optional:    true,
-				Elem:        &schema.Schema{Type: schema.TypeString},
-				Description: "Groups associated with the application",
-			},
-			"users": {
-				Type:        schema.TypeSet,
-				Optional:    true,
-				Elem:        &schema.Schema{Type: schema.TypeString},
-				Description: "Users associated with the application",
-			},
 		},
 	}
 }
@@ -177,13 +165,6 @@ func dataSourceAppOauthRead(ctx context.Context, d *schema.ResourceData, m inter
 		logger(m).Info("found multiple OAuth applications with the criteria supplied, using the first one, sorted by creation date")
 		app = appList[0]
 	}
-	users, groups, err := listAppUsersAndGroupsIDs(ctx, getOktaClientFromMetadata(m), app.Id)
-	if err != nil {
-		return diag.Errorf("failed to list OAuth's app groups and users: %v", err)
-	}
-	_ = d.Set("groups", convertStringSetToInterface(groups))
-	_ = d.Set("users", convertStringSetToInterface(users))
-	d.SetId(app.Id)
 	_ = d.Set("label", app.Label)
 	_ = d.Set("name", app.Name)
 	_ = d.Set("status", app.Status)

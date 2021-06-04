@@ -5,10 +5,6 @@ resource "okta_app_oauth" "test" {
   redirect_uris  = ["http://d.com/"]
   response_types = ["code", "token", "id_token"]
   issuer_mode    = "ORG_URL"
-
-  lifecycle {
-    ignore_changes = ["users", "groups"]
-  }
 }
 
 resource "okta_group" "test" {

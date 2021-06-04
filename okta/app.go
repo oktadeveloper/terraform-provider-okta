@@ -3,39 +3,11 @@ package okta
 import (
 	"context"
 	"encoding/json"
-	"fmt"
-	"net/http"
-	"sync"
 
 	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/schema"
 	"github.com/okta/okta-sdk-golang/v2/okta"
 	"github.com/okta/okta-sdk-golang/v2/okta/query"
 )
-
-var appUserResource = &schema.Resource{
-	Schema: map[string]*schema.Schema{
-		"scope": {
-			Type:        schema.TypeString,
-			Computed:    true,
-			Description: "Scope of application user.",
-		},
-		"id": {
-			Type:        schema.TypeString,
-			Optional:    true,
-			Description: "User ID.",
-		},
-		"username": {
-			Type:        schema.TypeString,
-			Optional:    true,
-			Description: "Username for user.",
-		},
-		"password": {
-			Type:        schema.TypeString,
-			Optional:    true,
-			Description: "Password for user application.",
-		},
-	},
-}
 
 var baseAppSchema = map[string]*schema.Schema{
 	"name": {
@@ -52,18 +24,6 @@ var baseAppSchema = map[string]*schema.Schema{
 		Type:        schema.TypeString,
 		Computed:    true,
 		Description: "Sign on mode of application.",
-	},
-	"users": {
-		Type:        schema.TypeSet,
-		Optional:    true,
-		Elem:        appUserResource,
-		Description: "Users associated with the application",
-	},
-	"groups": {
-		Type:        schema.TypeSet,
-		Optional:    true,
-		Elem:        &schema.Schema{Type: schema.TypeString},
-		Description: "Groups associated with the application",
 	},
 	"status": {
 		Type:             schema.TypeString,
@@ -238,43 +198,6 @@ func updateAppByID(ctx context.Context, id string, m interface{}, app okta.App) 
 	return suppressErrorOn404(resp, err)
 }
 
-func handleAppGroups(ctx context.Context, id string, d *schema.ResourceData, client *okta.Client) []func() error {
-	existingGroups, _ := listApplicationGroupAssignments(ctx, client, id)
-	var (
-		asyncActionList []func() error
-		groupIDList     []string
-	)
-
-	if arr, ok := d.GetOk("groups"); ok {
-		rawArr := arr.(*schema.Set).List()
-		groupIDList = make([]string, len(rawArr))
-
-		for i, gID := range rawArr {
-			groupID := gID.(string)
-			groupIDList[i] = groupID
-
-			if !containsGroup(existingGroups, groupID) {
-				asyncActionList = append(asyncActionList, func() error {
-					_, resp, err := client.Application.CreateApplicationGroupAssignment(ctx, id,
-						groupID, okta.ApplicationGroupAssignment{})
-					return responseErr(resp, err)
-				})
-			}
-		}
-	}
-
-	for _, group := range existingGroups {
-		if !contains(groupIDList, group.Id) {
-			groupID := group.Id
-			asyncActionList = append(asyncActionList, func() error {
-				return suppressErrorOn404(client.Application.DeleteApplicationGroupAssignment(ctx, id, groupID))
-			})
-		}
-	}
-
-	return asyncActionList
-}
-
 func listApplicationGroupAssignments(ctx context.Context, client *okta.Client, id string) ([]*okta.ApplicationGroupAssignment, error) {
 	var resGroups []*okta.ApplicationGroupAssignment
 	groups, resp, err := client.Application.ListApplicationGroupAssignments(ctx, id, &query.Params{Limit: defaultPaginationLimit})
@@ -296,51 +219,6 @@ func listApplicationGroupAssignments(ctx context.Context, client *okta.Client, i
 	return resGroups, nil
 }
 
-func containsGroup(groupList []*okta.ApplicationGroupAssignment, id string) bool {
-	for _, group := range groupList {
-		if group.Id == id {
-			return true
-		}
-	}
-	return false
-}
-
-func containsAppUser(userList []*okta.AppUser, id string) bool {
-	for _, user := range userList {
-		if user.Id == id && user.Scope == userScope {
-			return true
-		}
-	}
-	return false
-}
-
-func shouldUpdateUser(userList []*okta.AppUser, id, username string) bool {
-	for _, user := range userList {
-		if user.Id == id &&
-			user.Scope == userScope &&
-			user.Credentials != nil &&
-			user.Credentials.UserName != username {
-			return true
-		}
-	}
-	return false
-}
-
-// Handles the assigning of groups and users to Applications. Does so asynchronously.
-func handleAppGroupsAndUsers(ctx context.Context, id string, d *schema.ResourceData, m interface{}) error {
-	var wg sync.WaitGroup
-	resultChan := make(chan []*result, 1)
-	client := getOktaClientFromMetadata(m)
-
-	groupHandlers := handleAppGroups(ctx, id, d, client)
-	userHandlers := handleAppUsers(ctx, id, d, client)
-	con := getParallelismFromMetadata(m)
-	promiseAll(con, &wg, resultChan, append(groupHandlers, userHandlers...)...)
-	wg.Wait()
-
-	return getPromiseError(<-resultChan, "failed to associate user or groups with application")
-}
-
 func handleAppLogo(ctx context.Context, d *schema.ResourceData, m interface{}, appID string, links interface{}) error {
 	l, ok := d.GetOk("logo")
 	if !ok {
@@ -348,90 +226,6 @@ func handleAppLogo(ctx context.Context, d *schema.ResourceData, m interface{}, a
 	}
 	_, err := getSupplementFromMetadata(m).UploadAppLogo(ctx, appID, l.(string))
 	return err
-}
-
-func handleAppUsers(ctx context.Context, id string, d *schema.ResourceData, client *okta.Client) []func() error {
-	// Looking upstream for existing user's, rather then the config for accuracy.
-	existingUsers, _ := listApplicationUsers(ctx, client, id)
-	var (
-		asyncActionList []func() error
-		users           []interface{}
-		userIDList      []string
-	)
-
-	if set, ok := d.GetOk("users"); ok {
-		users = set.(*schema.Set).List()
-		userIDList = make([]string, len(users))
-		for i, user := range users {
-			userProfile := user.(map[string]interface{})
-			uID := userProfile["id"].(string)
-			username := userProfile["username"].(string)
-			userIDList[i] = uID
-			// Not required
-			password, _ := userProfile["password"].(string)
-			if !containsAppUser(existingUsers, uID) {
-				asyncActionList = append(asyncActionList, func() error {
-					_, _, err := client.Application.AssignUserToApplication(ctx, id, okta.AppUser{
-						Id: uID,
-						Credentials: &okta.AppUserCredentials{
-							UserName: username,
-							Password: &okta.AppUserPasswordCredential{
-								Value: password,
-							},
-						},
-					})
-					return err
-				})
-			} else if shouldUpdateUser(existingUsers, uID, username) {
-				asyncActionList = append(asyncActionList, func() error {
-					_, _, err := client.Application.UpdateApplicationUser(ctx, id, uID, okta.AppUser{
-						Id: uID,
-						Credentials: &okta.AppUserCredentials{
-							UserName: username,
-							Password: &okta.AppUserPasswordCredential{
-								Value: password,
-							},
-						},
-					})
-					return err
-				})
-			}
-		}
-	}
-
-	for _, user := range existingUsers {
-		if user.Scope == userScope {
-			if !contains(userIDList, user.Id) {
-				userID := user.Id
-				asyncActionList = append(asyncActionList, func() error {
-					return suppressErrorOn404(client.Application.DeleteApplicationUser(ctx, id, userID, nil))
-				})
-			}
-		}
-	}
-
-	return asyncActionList
-}
-
-func listApplicationUsers(ctx context.Context, client *okta.Client, id string) ([]*okta.AppUser, error) {
-	var resUsers []*okta.AppUser
-	users, resp, err := client.Application.ListApplicationUsers(ctx, id, &query.Params{Limit: defaultPaginationLimit})
-	if err != nil {
-		return nil, err
-	}
-	for {
-		resUsers = append(resUsers, users...)
-		if resp.HasNextPage() {
-			resp, err = resp.Next(ctx, &users)
-			if err != nil {
-				return nil, err
-			}
-			continue
-		} else {
-			break
-		}
-	}
-	return resUsers, nil
 }
 
 func setAppStatus(ctx context.Context, d *schema.ResourceData, client *okta.Client, status string) error {
@@ -443,57 +237,6 @@ func setAppStatus(ctx context.Context, d *schema.ResourceData, client *okta.Clie
 		return responseErr(client.Application.DeactivateApplication(ctx, d.Id()))
 	}
 	return responseErr(client.Application.ActivateApplication(ctx, d.Id()))
-}
-
-func syncGroupsAndUsers(ctx context.Context, id string, d *schema.ResourceData, m interface{}) error {
-	ctx = context.WithValue(ctx, retryOnStatusCodes, []int{http.StatusNotFound})
-	client := getOktaClientFromMetadata(m)
-	// Temporary high limit to avoid issues short term. Need to support pagination here
-	userList, _, err := client.Application.ListApplicationUsers(ctx, id, &query.Params{Limit: defaultPaginationLimit})
-	if err != nil {
-		return fmt.Errorf("failed to list application users: %v", err)
-	}
-	// Temporary high limit to avoid issues short term. Need to support pagination here
-	groupList, _, err := client.Application.ListApplicationGroupAssignments(ctx, id, &query.Params{Limit: defaultPaginationLimit})
-	if err != nil {
-		return fmt.Errorf("failed to list application group assignments: %v", err)
-	}
-	flatGroupList := make([]interface{}, len(groupList))
-
-	for i, g := range groupList {
-		flatGroupList[i] = g.Id
-	}
-
-	var flattenedUserList []interface{}
-
-	for _, user := range userList {
-		if user.Scope == userScope {
-			var un, up string
-			if user.Credentials != nil {
-				un = user.Credentials.UserName
-				if user.Credentials.Password != nil {
-					up = user.Credentials.Password.Value
-				}
-			}
-			flattenedUserList = append(flattenedUserList, map[string]interface{}{
-				"id":       user.Id,
-				"username": un,
-				"scope":    user.Scope,
-				"password": up,
-			})
-		}
-	}
-	flatMap := map[string]interface{}{}
-
-	if len(flattenedUserList) > 0 {
-		flatMap["users"] = schema.NewSet(schema.HashResource(appUserResource), flattenedUserList)
-	}
-
-	if len(flatGroupList) > 0 {
-		flatMap["groups"] = schema.NewSet(schema.HashString, flatGroupList)
-	}
-
-	return setNonPrimitives(d, flatMap)
 }
 
 // setAppSettings available preconfigured SAML and OAuth applications vary wildly on potential app settings, thus
@@ -578,24 +321,4 @@ func deleteApplication(ctx context.Context, d *schema.ResourceData, m interface{
 	}
 	_, err := client.Application.DeleteApplication(ctx, d.Id())
 	return err
-}
-
-func listAppUsersAndGroupsIDs(ctx context.Context, client *okta.Client, id string) (users []string, groups []string, err error) {
-	appUsers, err := listApplicationUsers(ctx, client, id)
-	if err != nil {
-		return nil, nil, err
-	}
-	appGroups, err := listApplicationGroupAssignments(ctx, client, id)
-	if err != nil {
-		return nil, nil, err
-	}
-	users = make([]string, len(appUsers))
-	groups = make([]string, len(appGroups))
-	for i := range appUsers {
-		users[i] = appUsers[i].Id
-	}
-	for i := range appGroups {
-		groups[i] = appGroups[i].Id
-	}
-	return
 }

@@ -45,10 +45,6 @@ func resourceAppBasicAuthCreate(ctx context.Context, d *schema.ResourceData, m i
 		return diag.Errorf("failed to create basic auth application: %v", err)
 	}
 	d.SetId(app.Id)
-	err = handleAppGroupsAndUsers(ctx, app.Id, d, m)
-	if err != nil {
-		return diag.Errorf("failed to handle groups and users for basic auth application: %v", err)
-	}
 	err = handleAppLogo(ctx, d, m, app.Id, app.Links)
 	if err != nil {
 		return diag.Errorf("failed to upload logo for basic auth application: %v", err)
@@ -76,10 +72,6 @@ func resourceAppBasicAuthRead(ctx context.Context, d *schema.ResourceData, m int
 	_ = d.Set("hide_ios", app.Visibility.Hide.IOS)
 	_ = d.Set("hide_web", app.Visibility.Hide.Web)
 	_ = d.Set("logo_url", linksValue(app.Links, "logo", "href"))
-	err = syncGroupsAndUsers(ctx, app.Id, d, m)
-	if err != nil {
-		return diag.Errorf("failed to sync groups and users for basic auth application: %v", err)
-	}
 	return nil
 }
 
@@ -93,10 +85,6 @@ func resourceAppBasicAuthUpdate(ctx context.Context, d *schema.ResourceData, m i
 	err = setAppStatus(ctx, d, client, app.Status)
 	if err != nil {
 		return diag.Errorf("failed to set basic auth application status: %v", err)
-	}
-	err = handleAppGroupsAndUsers(ctx, app.Id, d, m)
-	if err != nil {
-		return diag.Errorf("failed to handle groups and users for basic auth application: %v", err)
 	}
 	if d.HasChange("logo") {
 		err = handleAppLogo(ctx, d, m, app.Id, app.Links)

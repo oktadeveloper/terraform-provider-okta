@@ -283,10 +283,6 @@ func suppressErrorOn404(resp *okta.Response, err error) error {
 	return responseErr(resp, err)
 }
 
-func getParallelismFromMetadata(meta interface{}) int {
-	return meta.(*Config).parallelism
-}
-
 func getOktaClientFromMetadata(meta interface{}) *okta.Client {
 	return meta.(*Config).oktaClient
 }

@@ -132,45 +132,6 @@ func TestAccAppSaml_crud(t *testing.T) {
 	})
 }
 
-// Add and remove groups/users
-func TestAccAppSaml_userGroups(t *testing.T) {
-	ri := acctest.RandInt()
-	mgr := newFixtureManager(appSaml)
-	config := mgr.GetFixtures("user_groups.tf", ri, t)
-	updatedConfig := mgr.GetFixtures("user_groups_updated.tf", ri, t)
-	resourceName := fmt.Sprintf("%s.test", appSaml)
-
-	resource.Test(t, resource.TestCase{
-		PreCheck:          func() { testAccPreCheck(t) },
-		ProviderFactories: testAccProvidersFactories,
-		CheckDestroy:      createCheckResourceDestroy(appSaml, createDoesAppExist(okta.NewSamlApplication())),
-		Steps: []resource.TestStep{
-			{
-				Config: config,
-				Check: resource.ComposeTestCheckFunc(
-					ensureResourceExists(resourceName, createDoesAppExist(okta.NewSamlApplication())),
-					resource.TestCheckResourceAttr(resourceName, "label", buildResourceName(ri)),
-					resource.TestCheckResourceAttr(resourceName, "status", statusActive),
-					resource.TestCheckResourceAttr(resourceName, "users.#", "2"),
-					resource.TestCheckResourceAttr(resourceName, "groups.#", "3"),
-					resource.TestCheckResourceAttr(resourceName, "key_years_valid", "3"),
-				),
-			},
-			{
-				Config: updatedConfig,
-				Check: resource.ComposeTestCheckFunc(
-					ensureResourceExists(resourceName, createDoesAppExist(okta.NewSamlApplication())),
-					resource.TestCheckResourceAttr(resourceName, "label", buildResourceName(ri)),
-					resource.TestCheckResourceAttr(resourceName, "status", statusActive),
-					resource.TestCheckResourceAttrSet(resourceName, "key_id"),
-					resource.TestCheckResourceAttr(resourceName, "groups.#", "1"),
-					resource.TestCheckResourceAttr(resourceName, "users.#", "1"),
-				),
-			},
-		},
-	})
-}
-
 func buildTestSamlConfigMissingFields(rInt int) string {
 	name := buildResourceName(rInt)
 
