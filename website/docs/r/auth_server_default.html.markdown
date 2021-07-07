@@ -34,6 +34,8 @@ The following arguments are supported:
 
 - `description` - (Optional) The description of the authorization server.
 
+- `issuer_mode` - (Optional) Allows you to use a custom issuer URL. It can be set to `"CUSTOM_URL"` or `"ORG_URL"`
+
 ## Attributes Reference
 
 - `id` - ID of the authorization server.
