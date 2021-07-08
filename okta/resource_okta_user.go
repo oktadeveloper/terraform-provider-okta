@@ -74,6 +74,7 @@ func resourceUser() *schema.Resource {
 				Type:        schema.TypeSet,
 				Optional:    true,
 				Description: "User Okta admin roles - ie. ['APP_ADMIN', 'USER_ADMIN']",
+				Deprecated:  "The `admin_roles` field is now deprecated for the resource `okta_user`, please replace all uses of this with: `okta_user_admin_roles`",
 				Elem: &schema.Schema{
 					Type:             schema.TypeString,
 					ValidateDiagFunc: elemInSlice(validAdminRoles),
@@ -330,11 +331,14 @@ func resourceUserCreate(ctx context.Context, d *schema.ResourceData, m interface
 	d.SetId(user.Id)
 
 	// role assigning can only happen after the user is created so order matters here
-	roles := convertInterfaceToStringSetNullable(d.Get("admin_roles"))
-	if roles != nil {
-		err = assignAdminRolesToUser(ctx, user.Id, roles, client)
-		if err != nil {
-			return diag.FromErr(err)
+	// Only sync admin roles when it is set by a consumer as field is deprecated
+	if _, exists := d.GetOk("admin_roles"); exists {
+		roles := convertInterfaceToStringSetNullable(d.Get("admin_roles"))
+		if roles != nil {
+			err = assignAdminRolesToUser(ctx, user.Id, roles, client)
+			if err != nil {
+				return diag.FromErr(err)
+			}
 		}
 	}
 

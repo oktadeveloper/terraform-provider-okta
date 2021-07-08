@@ -65,6 +65,7 @@ The following arguments are supported:
 - `custom_profile_attributes` - (Optional) raw JSON containing all custom profile attributes.
 
 - `admin_roles` - (Optional) Administrator roles assigned to User.
+  - `DEPRECATED`: Please replace usage with the `okta_user_admin_roles` resource.
 
 - `city` - (Optional) User profile property.
 

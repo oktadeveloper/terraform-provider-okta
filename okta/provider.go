@@ -75,6 +75,7 @@ const (
 	userSchema             = "okta_user_schema"
 	userType               = "okta_user_type"
 	userGroupMemberships   = "okta_user_group_memberships"
+	userAdminRoles         = "okta_user_admin_roles"
 )
 
 // Provider establishes a client connection to an okta site
@@ -229,6 +230,7 @@ func Provider() *schema.Provider {
 			userBaseSchema:         resourceUserBaseSchema(),
 			userType:               resourceUserType(),
 			userGroupMemberships:   resourceUserGroupMemberships(),
+			userAdminRoles:         resourceUserAdminRoles(),
 
 			// The day I realized I was naming stuff wrong :'-(
 			"okta_idp":                       deprecateIncorrectNaming(resourceIdpOidc(), idpOidc),
